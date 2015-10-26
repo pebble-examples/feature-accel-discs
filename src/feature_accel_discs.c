@@ -36,8 +36,8 @@ static void disc_init(Disc *disc) {
   static double next_radius = 3;
 
   GRect frame = window_frame;
-  disc->pos.x = frame.size.w/2;
-  disc->pos.y = frame.size.h/2;
+  disc->pos.x = frame.size.w / 2;
+  disc->pos.y = frame.size.h / 2;
   disc->vel.x = 0;
   disc->vel.y = 0;
   disc->radius = next_radius;
@@ -60,9 +60,106 @@ static void disc_apply_accel(Disc *disc, AccelData accel) {
   });
 }
 
-static void disc_update(Disc *disc) {
-  double e = 0.5;
+static double square(double num) {
+  return num * num;
+}
 
+float get_sqrt( float num ) {
+  // Uses Babylonian sequence to approximate root of num
+  float approx, product, b_seq;
+  float tolerance = 0.001;
+
+  approx = num;
+  product = square(approx);
+  // Check if the square of our approximation is within the error tolerance of num
+  while(product - num >= tolerance) {
+    b_seq = ( approx + ( num / approx ) ) / 2;
+    approx = b_seq;
+    product = square(approx);
+  }
+  return approx;
+}
+
+static Vec2d multiply(Vec2d vec, double scale) {
+  return (Vec2d) { .x = vec.x * scale,
+                   .y = vec.y * scale };
+}
+
+static Vec2d add(Vec2d a, Vec2d b) {
+  return (Vec2d) { .x = a.x + b.x,
+                   .y = a.y + b.y };
+}
+
+static Vec2d subtract(Vec2d a, Vec2d b) {
+  return (Vec2d) { .x = a.x - b.x,
+                   .y = a.y - b.y };
+}
+
+static double get_length(Vec2d vec) {
+  return get_sqrt(square(vec.x) + square(vec.y));
+}
+
+static Vec2d set_length(Vec2d vec, double new_length, double old_length) {
+  return (Vec2d) { .x = vec.x * new_length / old_length,
+                   .y = vec.y * new_length / old_length};
+}
+
+static double dot(Vec2d a, Vec2d b) {
+  return a.x * b.x + a.y * b.y;
+}
+
+static Vec2d normalize(Vec2d vec) {
+  double length = get_length(vec);
+
+  if (length != 0) {
+    return (Vec2d) { .x = vec.x / length,
+                     .y = vec.y / length };
+  } else {
+    return (Vec2d) { .x = vec.x,
+                     .y = vec.y };
+  }
+}
+
+static Vec2d find_reflection_velocity(Vec2d bounds, Disc *disc) {
+  Vec2d normal = normalize(subtract(disc->pos, bounds));
+
+  // Solve for parallel and perpendicular components of the discs velocity vector
+  Vec2d perpendicular = multiply(normal, dot(disc->vel, normal));
+  Vec2d parallel = subtract(disc->vel, perpendicular);
+  
+  float friction = 1;
+  float elasticity = 1;
+  // Deflection vector off wall
+  Vec2d vec_incident = subtract(multiply(parallel, friction), multiply(perpendicular, elasticity));
+
+  return vec_incident;
+}
+
+static void disc_update(Disc *disc) {
+  double e = PBL_IF_ROUND_ELSE(0.7, 0.5);
+
+  // update disc position
+  disc->pos.x += disc->vel.x;
+  disc->pos.y += disc->vel.y;
+
+#ifdef PBL_ROUND
+  // -1 accounts for how pixels are drawn onto the screen. Pebble round has a 180x180 pixel screen.
+  // Since this is an even number, the centre of the screen is a line separating two side by side
+  // pixels. Thus, if you were to draw a pixel at (90, 90), it would show up on the bottom right
+  // pixel from the center point of the screen.
+  Vec2d circle_center = (Vec2d) { .x = window_frame.size.w / 2 - 1,
+                                  .y = window_frame.size.h / 2 - 1 };
+
+  if ((square(circle_center.x - disc->pos.x) + square(circle_center.y - disc->pos.y)) > square(circle_center.x - disc->radius)) {
+    // Check to see whether disc is within screen radius
+    Vec2d norm = subtract(disc->pos, circle_center);
+    if (get_length(norm) > (circle_center.x - disc->radius)) {
+      norm = set_length(norm, (circle_center.x - disc->radius), get_length(norm));
+      disc->pos = add(circle_center, norm);
+    }
+    disc->vel = multiply(find_reflection_velocity(circle_center, disc), e);
+  }
+#else
   if ((disc->pos.x - disc->radius < 0 && disc->vel.x < 0)
     || (disc->pos.x + disc->radius > window_frame.size.w && disc->vel.x > 0)) {
     disc->vel.x = -disc->vel.x * e;
@@ -72,17 +169,12 @@ static void disc_update(Disc *disc) {
     || (disc->pos.y + disc->radius > window_frame.size.h && disc->vel.y > 0)) {
     disc->vel.y = -disc->vel.y * e;
   }
-
-  disc->pos.x += disc->vel.x;
-  disc->pos.y += disc->vel.y;
+#endif
 }
 
 static void disc_draw(GContext *ctx, Disc *disc) {
-#ifdef PBL_COLOR
-  graphics_context_set_fill_color(ctx, disc->color);
-#else
-  graphics_context_set_fill_color(ctx, GColorWhite);
-#endif
+  graphics_context_set_fill_color(ctx, PBL_IF_COLOR_ELSE(disc->color, GColorWhite));
+
   graphics_fill_circle(ctx, GPoint(disc->pos.x, disc->pos.y), disc->radius);
 }
 
