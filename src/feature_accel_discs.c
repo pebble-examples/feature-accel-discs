@@ -1,26 +1,12 @@
 #include "pebble.h"
+#include "feature_accel_discs.h"
+#include "round_math.h"
 
 #define MATH_PI 3.141592653589793238462
 #define NUM_DISCS 20
 #define DISC_DENSITY 0.25
 #define ACCEL_RATIO 0.05
 #define ACCEL_STEP_MS 50
-
-typedef struct Vec2d {
-  double x;
-  double y;
-} Vec2d;
-
-typedef struct Disc {
-#ifdef PBL_COLOR
-  GColor color;
-#endif
-  Vec2d pos;
-  Vec2d vel;
-  double mass;
-  double radius;
-} Disc;
-
 
 static Window *s_main_window;
 static Layer *s_disc_layer;
@@ -58,81 +44,6 @@ static void disc_apply_accel(Disc *disc, AccelData accel) {
     .x = accel.x * ACCEL_RATIO,
     .y = -accel.y * ACCEL_RATIO
   });
-}
-
-static double square(double num) {
-  return num * num;
-}
-
-float get_sqrt( float num ) {
-  // Uses Babylonian sequence to approximate root of num
-  float approx, product, b_seq;
-  float tolerance = 0.001;
-
-  approx = num;
-  product = square(approx);
-  // Check if the square of our approximation is within the error tolerance of num
-  while(product - num >= tolerance) {
-    b_seq = ( approx + ( num / approx ) ) / 2;
-    approx = b_seq;
-    product = square(approx);
-  }
-  return approx;
-}
-
-static Vec2d multiply(Vec2d vec, double scale) {
-  return (Vec2d) { .x = vec.x * scale,
-                   .y = vec.y * scale };
-}
-
-static Vec2d add(Vec2d a, Vec2d b) {
-  return (Vec2d) { .x = a.x + b.x,
-                   .y = a.y + b.y };
-}
-
-static Vec2d subtract(Vec2d a, Vec2d b) {
-  return (Vec2d) { .x = a.x - b.x,
-                   .y = a.y - b.y };
-}
-
-static double get_length(Vec2d vec) {
-  return get_sqrt(square(vec.x) + square(vec.y));
-}
-
-static Vec2d set_length(Vec2d vec, double new_length, double old_length) {
-  return (Vec2d) { .x = vec.x * new_length / old_length,
-                   .y = vec.y * new_length / old_length};
-}
-
-static double dot(Vec2d a, Vec2d b) {
-  return a.x * b.x + a.y * b.y;
-}
-
-static Vec2d normalize(Vec2d vec) {
-  double length = get_length(vec);
-
-  if (length != 0) {
-    return (Vec2d) { .x = vec.x / length,
-                     .y = vec.y / length };
-  } else {
-    return (Vec2d) { .x = vec.x,
-                     .y = vec.y };
-  }
-}
-
-static Vec2d find_reflection_velocity(Vec2d bounds, Disc *disc) {
-  Vec2d normal = normalize(subtract(disc->pos, bounds));
-
-  // Solve for parallel and perpendicular components of the discs velocity vector
-  Vec2d perpendicular = multiply(normal, dot(disc->vel, normal));
-  Vec2d parallel = subtract(disc->vel, perpendicular);
-  
-  float friction = 1;
-  float elasticity = 1;
-  // Deflection vector off wall
-  Vec2d vec_incident = subtract(multiply(parallel, friction), multiply(perpendicular, elasticity));
-
-  return vec_incident;
 }
 
 static void disc_update(Disc *disc) {
