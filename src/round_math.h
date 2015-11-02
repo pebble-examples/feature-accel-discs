@@ -1,3 +1,5 @@
+#pragma once
+
 double square(double num);
 float get_sqrt( float num );
 Vec2d multiply(Vec2d vec, double scale);

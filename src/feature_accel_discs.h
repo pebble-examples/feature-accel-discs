@@ -1,3 +1,5 @@
+#pragma once
+
 typedef struct Vec2d {
   double x;
   double y;
